@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    <head>
+        <meta charset="UTF-8" />
+
+        <style type="text/css">
+            {{bootstrap_css}}
+        </style>
+        <style type="text/css">
+            {{app_css}}
+        </style>
+        <title>leetCode Daily</title>
+    </head>
+
+    <body>
+        <!-- version：0.0.1  -->
+        <!-- comment：将会实现基本页面效果设计，仅实现中文支持 -->
+        <div id="m">
+            <div id="h">
+                <h1>
+                    <span id="no">{{no}}</span><span>.</span><span>「</span><span id="tittle">{{title}}</span><span>」</span>
+                </h1>
+                <p>
+                    <span><strong>难度：</strong></span>
+                    <!-- <span id="diffcutly" class="label label-success">Easy</span> -->
+                    {{level}}
+                </p>
+                <h5 class="page-header" style="margin-top: 0px"></h5>
+
+                <h3><span>题目：</span></h3>
+            </div>
+
+            <div id="c">{{context}}</div>
+            <!--  分割线  -->
+            <h5 class="page-header" style="margin-top: 0px;"></h5>
+
+            <div id="t">
+                <span><strong>标签：</strong></span>
+                <!-- <span class="label label-info">数组</span>             -->
+                {{tags}}
+            </div>
+            <h5 class="page-header" style="margin-top: 0px;"></h5>
+            <div class="f">
+                <p><strong>插件信息：</strong><span>作者：<span>「{{auth}}</span>」</span>
+                    <span>|</span>
+                    <span>版本：<span>「{{version}}」</span></span></p>
+            </div>
+        </div>
+    </body>
+</html>
