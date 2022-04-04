@@ -1,6 +1,6 @@
 import nonebot
 
-nonebot.load_plugins("plugins/leetcode")
+nonebot.load_plugins("plugins_ex/evlic_repo/leetcode")
 
 # # 功能 cmd
 # daily_cmd = "今日力扣"

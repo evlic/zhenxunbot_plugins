@@ -16,7 +16,7 @@ import requests
 import base64
 
 from utils.message_builder import image 
-from ..browser import get_new_page 
+from .._util_browser__ import get_new_page 
 
 __plugin_version__ = 0.1
 __plugin_author__ = "evlic@Github"

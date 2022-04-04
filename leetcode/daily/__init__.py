@@ -56,7 +56,7 @@ Config.add_plugin_config(
 
 @scheduler.scheduled_job(
     "cron",
-    hour=10,
+    hour=9,
     minute=30,
 )
 async def _():

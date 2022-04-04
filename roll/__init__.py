@@ -1,7 +1,6 @@
 from nonebot import on_command
 from nonebot.adapters.onebot.v11 import MessageEvent, GroupMessageEvent, Message
 from nonebot.params import CommandArg
-from sqlalchemy import false, true
 from services.log import logger
 from configs.config import NICKNAME
 from utils.utils import is_number
@@ -18,8 +17,9 @@ __plugin_version__ = 0.1
 __plugin_usage__ = """
 usage：
     随机数字 或 随机选择事件
-    roll    代表返回结果唯一    (提醒词有些羞耻，不是「{}」干的)
-    rolls   代表返回多个结果
+    roll    代表返回结果唯一
+    rolls   代表返回多个结果       需要指定返回个数并且小于等于长度，默认等于长度
+                                第一个参数会被尝试作为数字读取视为是数字
     
     分隔符：
         输入区间只支持空格
@@ -32,18 +32,22 @@ usage：
         
         rolls: 输入一个列表返回随机顺序
             参数 -n 返回带标号的结果，-n0 标号从 0 开始
+            参数 -a 定义数组区间 例如 (1,3) 为开区间 
+                    注意：定义区间时不能有空格(懒得写更多的字符串代码了)
+                        - 支持的写法：
+                            [x,y] (x,y) [x,y) (x,y]
         - 示例：
             rolls -n xxx,xxx1,xxx2
             >>  1:「xxx」
                 2:「xxx1」
                 3:「xxx2」
-        rollNum: 指定 1-x 的数字
-        rollsNum: 指定 1-x 中的 多个数字（不会重复） << 有没有可能班上需要抽人
+            rolls -a [1,3] -n0
+            >>  
         
 """.format(__plugin_author__).strip()
 
 __plugin_des__ = "犹豫不决吗？那就让我帮你决定吧"
-__plugin_cmd__ = ["roll", "roll *[文本]", "rollNum", "rolls", "rollsNum"]
+__plugin_cmd__ = ["roll", "roll *[文本]", "rollNum [min, max]", "rolls", "rollsNum [-n] &cnt &[min, max] [| 排除项]"]
 __plugin_settings__ = {
     "level": 5,
     "default_status": True,
@@ -60,105 +64,123 @@ def words_split(words : str) -> list:
     r.sort(key=lambda s : len(s), reverse=True)
     return r[0]
 
+is_range_base = 0b10101
+qupte =  0b10000
+lopen =  0b00100
+lclose = 0b01100
+ropen =  0b00001
+rclose = 0b00011
+def is_range(s : str) -> int:
+    # 设计位运算
+    # 00000
+    # 10000 表示只有一个逗号
+    # 10100 表示左开区间
+    # 11100 表示左闭区间
+    # 11101 表示左闭右开区间
+    # 11111 表示左右闭区间
+    res = 0
+    if s.startswith("[") :
+        res |= lclose
+    elif  s.startswith("("):
+        res |= lopen
+    if s.endswith("]"):
+        res |= rclose
+    elif s.endswith(")"):
+        res |= ropen
+    if s.count(',') == 1:
+        res |= qupte
+    return res
 
+# 请确保为 range 格式，仅进行 isNumber 判断
+def parse_range(s : str) -> list:
+    res = []
+    flag = is_range(s)
+    n = s[1: len(s) - 1].split(',')
+    
+    for v in n:
+        if is_number(v):
+            res.append(int(v))
+        else:
+            return res
+    if flag & lclose < lclose:
+        res[0] -= 1
+    if flag & rclose < rclose:
+        res[1] -= 1
+
+    return res
+
+# roll >> 返回单个的随机结果
 roll = on_command("roll", priority=5, block=True)
+# rolls >> 返回指定个数的随机结果
+rolls = on_command("rolls", priority=5, block=True)
+
 @roll.handle()
 async def _(event: MessageEvent, arg: Message = CommandArg()):
     """
     roll            返回 1 - 100 随机数
     roll [words]*   返回 选择输入文本项中随机一个
     """
-    msg = arg.extract_plain_text().strip().split()
-    words = []
-    if len(msg) == 1:
-        words = words_split(msg[0])
+    words = arg.extract_plain_text().strip().split()
+    # 如果发现指令以后的参数只有一个，就认为不是以空格作为分隔符的，执行额外的字符串处理工作
+    if len(words) == 1:
+        words = words_split(words[0])
     if not words:
         await roll.finish(f"roll: {random.randint(0, 100)}", at_sender=True)
     
-    user_name = event.sender.card or event.sender.nickname
-    await roll.send(
-        random.choice(
-            [
-                "转动命运的齿轮，拨开眼前迷雾...",
-                f"启动吧，命运的水晶球，为{user_name}指引方向！",
-                "嗯哼，在此刻转动吧！命运！",
-                f"在此祈愿，请为{user_name}降下指引...",
-            ]
-        )
-    )
+    user_name = event.sender.card or event.sender.nickname 
     await asyncio.sleep(1)
     x = random.choice(words)
-    await roll.send(
-        random.choice(
-            [
-                f"让{NICKNAME}看看是什么结果！答案是：‘{x}’",
-                f"根据命运的指引，接下来{user_name} ‘{x}’ 会比较好",
-                f"祈愿被回应了！是 ‘{x}’！",
-                f"结束了，{user_name}，命运之轮停在了 ‘{x}’！",
-            ]
-        )
-    )
-    logger.info(
-        f"(USER {event.user_id}, "
-        f"GROUP {event.group_id if isinstance(event, GroupMessageEvent) else 'private'}) 发送roll：{msg}"
-    )
+    await roll.finish(f"roll: {x}", at_sender = True)
 
-rollNum = on_command("rollNum", priority=5, block=True)
-@rollNum.handle()
-async def _(event: MessageEvent, arg: Message = CommandArg()):
-    msg = arg.extract_plain_text().strip().split()
-    if not msg:
-        await rollNum.finish("需要指定数的范围, 可以输入两个整数, 分别为上下界")
-    
-    n = len(msg)
-    if n == 1 and is_number(msg[0]):
-        await rollNum.finish(f"roll: {random.randint(1, int(msg[0]))}", at_sender=True)
-    elif n == 2 and (is_number(msg[0]) and is_number(msg[1].is_integer())):
-        a, b = int(msg[0]), int(msg[1])
-        if a > b: 
-            a, b = b, a
-        await rollNum.finish(f"roll: {random.randint(a, b)}", at_sender=True)
-    else:
-        rollNum.finish(f"需要指定数的范围, 可以输入最多两个整数, 分别为上下界。输入有误 >> len = {n}")
-        ...
-    await asyncio.sleep(1)
-    x = random.choice(msg)
-    await rollNum.finish(f"roll: {x}", at_sender=True)
-
-
-rolls = on_command("rolls", priority=5, block=True)
 @rolls.handle()
 async def _(event: MessageEvent, arg: Message=CommandArg()):
     msg = arg.extract_plain_text().strip().split()
-    # 把 msg 的最后一位视作 words
-    # 支持的定制参数
-    # -n 带序号(高优先级) ，-n0 序号从 0 开始
-    words = words_split(msg[len(msg) - 1])
-    msg = msg[:len(msg) - 1]
+    flag = {"-n":False, "-a": False, "-n0": False}
     
-    # 解析自定义参数
-    flag, cnt, res = "", len(words), []
-    for i in msg:
-        if is_number(i):
-            cnt = i
-            break
+    idx = 0
+
+    while idx < len(msg):     
+        if msg[idx] in flag:
+            flag[msg[idx]] = True
+            msg.pop(idx)
+        else:
+            idx += 1
+    # logger.info(msg)
     
-    if "-n" in msg:
-        flag = 'n'
-    elif '-n0' in msg:
-        flag = 'n0'
-    
-    if cnt < len(words) - 1:
+    cnt = 0
+    if is_number(msg[0]):
+        cnt = int(msg[0])
+        if len(msg) > 1:
+            msg.pop(0)
+            # logger.info(f"cnt >> {cnt}")
+    else: 
+        cnt = 0xefffffff
+    # 此时 msg 可能是区间 也可能是 序列
+    words = []
+    if flag["-a"]:
+        if is_range(msg[0]) >= is_range_base:
+            interval = parse_range(msg[0])
+            if len(interval) == 2:
+                words = [*range(interval[0], interval[1] + 1)]
+            else : return
+        else: 
+            await rolls.finish(f"{msg[0]} 不是 range | 依据 { is_range(msg[0]) } >= {is_range_base} =  {is_range(msg[0]) >= is_range_base}")
+    else:
+        words = words_split(msg[0])
+
+    # logger.info(f"{words}, {cnt}")
+
+    if cnt < len(words):
         words = random.choices(words, k=cnt)
     else:
         random.shuffle(words)
 
     res = ""
-    if flag == "":
+    if not flag["-n"] and not flag["-n0"]:
         res = words
     else:
         des = 0
-        if flag == "n" :
+        if flag["-n"] :
             des = 1
         
             # self.tags = " ".join("{}"
@@ -168,65 +190,3 @@ async def _(event: MessageEvent, arg: Message=CommandArg()):
 
     await asyncio.sleep(1)
     await rolls.finish(f"rolls: \n{res}", at_sender=True)
-
-
-# l h cnt [exclude [num in range(l, h)]]
-rollNums = on_command("rollsNum", priority=5, block=True)
-@rollNums.handle()
-async def _(event: MessageEvent, arg: Message = CommandArg()):
-    msg = arg.extract_plain_text().strip().split()
-
-    n = len(msg)
-
-    if n < 3: 
-        for s in msg: 
-            if not is_number(s):
-                return 
-        if n == 2:
-            a, b = int(msg[0]), int(msg[1])
-            if a > b:
-                a, b = b, a
-            array = list(range(a, b + 1))
-            await asyncio.sleep(1)
-            random.shuffle(array)
-            await rollNums.finish(f"rolls: {array}", at_sender=True)
-
-        else:
-            pass
-
-    else:
-        flag = true
-        exclude = false
-        
-        for s in msg[: 3]:
-            if not is_number(s):
-                flag = not flag
-                break
-        
-        if flag:
-            # ab 之间取 c 个 (公平随机)
-            a, b, c = int(msg[0]), int(msg[1]), int(msg[2])
-
-            if a > b: 
-                a, b = b, a
-            
-            if c >= b - a - (n - 4):
-                flag = not flag
-
-            choice_list = list(range(a, b + 1))
-            if n > 3 and msg[3] in ["|", "｜", "exclude"]:
-                exclude = not exclude
-                for s in msg[4:]:
-                    if is_number(s): 
-                        choice_list.remove(int(s))
-            
-            if flag:
-                res = random.choices(choice_list, k=c)
-            else:
-                random.shuffle(choice_list)
-                res = choice_list
-
-            await asyncio.sleep(1)
-            await rollNums.finish(f"rolls: {res}", at_sender=True)
-    
-    await rollNums.finish(f"输入有误请自行查阅文档", at_sender=True)
